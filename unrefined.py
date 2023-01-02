@@ -173,7 +173,7 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
     end_time=time.perf_counter()
     if verbose:
         print("Track " + str(track_number) + " summed in " + str(round(end_time-start_time,2)) + " seconds!")
-    file_tracks.append(file_track)
+    file_tracks.append([track_number-1,file_track])
 
 if __name__ == "__main__":
     parser=argparse.ArgumentParser(description="Plays back a .usf file")
@@ -356,7 +356,6 @@ if __name__ == "__main__":
                                     pattern_track_temp+=pattern_temp["pattern"][track_num]
                         pattern.append(pattern_track_temp)
 
-                    file_tracks=[]
                     pattern_length=len(pattern[0]) # is assumed the same for all other tracks!
                     pattern_tracks=len(pattern)
                     track_length=beat_length*pattern_length # in samples
@@ -412,7 +411,6 @@ if __name__ == "__main__":
                         manager=multiprocessing.Manager()
                         manager_list=manager.list()
                         processes=[]
-                        #file_tracks=[]
                         for track in range(0,len(pattern)):
                             # assemble the current track into an array from which to read...
                             current_pattern_track=[]
@@ -421,7 +419,7 @@ if __name__ == "__main__":
                                     current_pattern_track.append(pattern[track][beat])
                                 else:
                                     current_pattern_track.append(blank_command)
-                            #render(verbose,beat_length,samples,command_arguments_amount,optional_arguments_amount,track_length,quality,current_pattern_track,file_tracks,track+1,len(pattern))
+                            
                             processes.append(multiprocessing.Process(target=render,args=(verbose,beat_length,samples,command_arguments_amount,optional_arguments_amount,track_length,quality,current_pattern_track,manager_list,track+1,len(pattern),)))
                         
                         for process in processes:
@@ -429,7 +427,13 @@ if __name__ == "__main__":
                         for process in processes:
                             process.join()
                             
-                        file_tracks=list(manager_list).copy()
+                        file_tracks_temp=list(manager_list).copy()
+                        
+                        # assemble the tracks in order...
+                        file_tracks=[None]*len(pattern)
+                        # format: [0,[track data]],[1,[track data]]
+                        for index in file_tracks_temp:
+                            file_tracks[index[0]]=index[1]
 
                         # summing time!
 
@@ -540,16 +544,31 @@ if __name__ == "__main__":
                                 file_downsampled=[]
                                 print_counter=print_counter_max*2
                                 position=0
-                                for byte in file_finished: # note to future me: one pass is enough to completely eliminate aliasing!
-                                    if verbose:
-                                        if print_counter==print_counter_max:
-                                            print("Filtering... " + str(round((position/len(file_finished))*100,2)) + "%    ",end="\r")
-                                            print_counter=0
-                                        else:
-                                            print_counter+=1
-                                    file_filtered.append((byte+previous_byte)//2) # that my friends is a low-pass filter. (mind explodes)
-                                    previous_byte=byte
-                                    position+=1
+                                if stereo:
+                                    for byte in range(0,len(file_finished)-2,2):
+                                        if verbose:
+                                            if print_counter==print_counter_max:
+                                                print("Filtering... " + str(round((position/len(file_finished))*100,2)) + "%    ",end="\r")
+                                                print_counter=0
+                                            else:
+                                                print_counter+=1
+                                        file_filtered.append((previous_byte+file_finished[byte])//2) # that my friends is a low-pass filter. (mind explodes)
+                                        previous_byte=file_finished[byte]
+                                        previous_byte=127
+                                        file_filtered.append((previous_byte+file_finished[byte+1])//2)
+                                        previous_byte=file_finished[byte+1]
+                                        position+=2
+                                else:
+                                    for byte in file_finished: # note to future me: one pass is enough to completely eliminate aliasing!
+                                        if verbose:
+                                            if print_counter==print_counter_max:
+                                                print("Filtering... " + str(round((position/len(file_finished))*100,2)) + "%    ",end="\r")
+                                                print_counter=0
+                                            else:
+                                                print_counter+=1
+                                        file_filtered.append((byte+previous_byte)//2) # that my friends is a low-pass filter. (mind explodes)
+                                        previous_byte=byte
+                                        position+=1
                                     
                                 if verbose:
                                     print("Filtering... 100.0%        ",end="\r")
