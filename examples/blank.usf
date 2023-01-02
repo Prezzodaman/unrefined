@@ -1,0 +1,19 @@
+{
+	"samples": [
+	],
+	"patterns":[
+		{
+			"name":"pattern",
+			"pattern":[
+					[
+						"00 00 00 00"
+					]
+				]
+			}
+		],
+	"arrangement":[
+		"pattern"
+	],
+	"sample_rate": 32000,
+	"beat_length": 2000
+}
