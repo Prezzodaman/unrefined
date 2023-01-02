@@ -38,6 +38,7 @@ Note: all of these programs deal with unsigned 8-bit sound files, so bear that i
 - **fatten.py** - "Fattens" a sample by boosting the lows and highs, keeping the mids as-is. Obesity is fixed, because no other value seemed to generate the desired effect!
 - **16to8.py** - Converts a 16-bit signed wave file to an 8-bit unsigned raw file, for processing through the effects/using in your songs. Just like "record.py", all the conversion is done by hand.
 - **prefs.py** - A library that's used behind the scenes to load the preferences file. Nothing you need to worry about!
+- **unrefined_gui.py** - An unfinished GUI for creating .usf files. This'll probably never get finished.
 
 ## Technical Information
 
