@@ -133,7 +133,7 @@ Note that all hex values and optional commands are case insensitive, so you can 
 
 - **Windows** - Perfect, because that's what it was developed on! Tested on both Windows 11 and Windows 7.
 - **Linux** - Tested on Ubuntu. Requires installation of PortAudio for PyAudio to work, but once installed, works perfectly fine! There may be some error messages when playing back a file, even if it plays back okay; these are caused by ALSA trying to find a bunch of devices that don't exist in the configuration file. If they're getting annoying, browse to "/usr/share/alsa/alsa.conf" and comment out all unnecessary devices, or just use the -np/--no_play option. You'll also need to run "python3 unrefined.py" instead of just "unrefined.py" as Linux doesn't see .py files as executable by default, though you can always change this yourself.
-Mac - Unknown. Please report back!
+- **Mac** - Unknown. Please report back!
 
 If playback is stuttering, change the "buffer_size" option in "prefs.cfg". I can leave this at 1 using Windows, but in Linux, 11 seems to be a safe bet. If your song has a high sample rate, use the -sd/--safe_downsample option to guarantee less stutter. Alternatively, use -q/--quality to render at a lower sample rate; this will be quicker, but the result will include a lot more aliasing.
 
