@@ -1,4 +1,5 @@
-# This entire program worked first try without any errors or adjustments needed. I can't believe it.
+# This entire program worked first try without any errors or adjustments needed. I can't believe it. (well, the first version did!)
+# v1.0.1: Fixed a minor bug where you could use the right channel, even if the file was mono
 
 import pyaudio
 import time
@@ -25,7 +26,7 @@ if "buffer_size" in prefs:
     if isinstance(prefs["buffer_size"],int):
         stutter=prefs["buffer_size"]
 
-print("16to8 v1.0.0")
+print("16to8 v1.0.1")
 print("by Presley Peters, 2022")
 print()
 
@@ -41,7 +42,7 @@ else:
         file_orig=file.readframes(file.getnframes())
         file_step=file.getnchannels()*2
     
-    if right_channel:
+    if right_channel and file_step==4:
         file_start=1 # well that was hard to implement :kekw:
         
     file_quantized=[]

@@ -1,3 +1,5 @@
+# v1.0.1: Tracks now render in order (important for stereo renders)
+
 import pyaudio
 import time
 import json
@@ -219,7 +221,7 @@ if __name__ == "__main__":
         blank_command+="00 "
     blank_command=blank_command[:-1]
 
-    print("Unrefined Replayer v1.0.0 alpha")
+    print("Unrefined Replayer v1.0.1 alpha")
     print("by Presley Peters, 2022")
     print()
     if quality==1:
