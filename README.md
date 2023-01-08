@@ -1,4 +1,6 @@
 # Unrefined Sequencing Format
+![USF Logo](https://user-images.githubusercontent.com/76560493/211200052-f2da2b69-30b6-4049-8653-dbe08c34e21a.png)
+
 A crude sample-based sequencing format developed in Python.
 
 ## Requirements
@@ -37,6 +39,10 @@ Note: all of these programs deal with unsigned 8-bit sound files, so bear that i
 - **loudness.py** - Makes a sound louder or quieter.
 - **fatten.py** - "Fattens" a sample by boosting the lows and highs, keeping the mids as-is. Obesity is fixed, because no other value seemed to generate the desired effect!
 - **16to8.py** - Converts a 16-bit signed wave file to an 8-bit unsigned raw file, for processing through the effects/using in your songs. Just like "record.py", all the conversion is done by hand.
+- **interpolate.py** - Linearly interpolates a sample, producing a file at half speed with reduced aliasing. There's an optional low-pass filter to achieve an even smoother sound. Here's the difference it can make:
+
+![interpolation_difference](https://user-images.githubusercontent.com/76560493/211199897-ad923fac-ac61-4627-a46c-ca4a9c17581e.png)
+
 - **prefs.py** - A library that's used behind the scenes to load the preferences file. Nothing you need to worry about!
 - **unrefined_gui.py** - An unfinished GUI for creating .usf files. This'll probably never get finished.
 
