@@ -1,3 +1,5 @@
+# v1.0.1: Converts from signed to unsigned the proper way
+
 import pyaudio
 import time
 import argparse
@@ -26,7 +28,7 @@ if "buffer_size" in prefs:
     if isinstance(prefs["buffer_size"],int):
         stutter=prefs["buffer_size"]
 
-print("Record v1.0.0")
+print("Record v1.0.1")
 print("by Presley Peters, 2022")
 print()
 
@@ -74,13 +76,8 @@ else:
     truncate_end_point_found=False
     quiet_bytes=0
     for a in range(0,len(recorded_file),2):
-        byte=recorded_file[a+1]
-        if byte>127: # it's a negative number
-            byte-=127
-        else: # it's a positive number, 0-127
-            byte+=127
+        byte=(recorded_file[a+1]+128) & 255
         recorded_file_quantized.append(byte)
-        # ^ that bit of code took me 6 hours to work out
 
         # then convert it to signed
         byte-=127

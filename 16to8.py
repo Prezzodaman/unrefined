@@ -1,5 +1,6 @@
 # This entire program worked first try without any errors or adjustments needed. I can't believe it. (well, the first version did!)
 # v1.0.1: Fixed a minor bug where you could use the right channel, even if the file was mono
+# v1.0.2: Converts from signed to unsigned the proper way
 
 import pyaudio
 import time
@@ -26,7 +27,7 @@ if "buffer_size" in prefs:
     if isinstance(prefs["buffer_size"],int):
         stutter=prefs["buffer_size"]
 
-print("16to8 v1.0.1")
+print("16to8 v1.0.2")
 print("by Presley Peters, 2022")
 print()
 
@@ -51,10 +52,7 @@ else:
             byte=file_orig[a+1]
         else:
             byte=file_orig[a]
-        if byte>127:
-            byte-=127
-        else:
-            byte+=127
+        byte=(byte+128) & 255
         file_quantized.append(byte)
         
     with open(output_file, "wb") as file:
