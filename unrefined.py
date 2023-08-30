@@ -1,4 +1,12 @@
-# v1.1:
+# v1.2.0:
+#	Replayer:
+#		Added a new, much more readable format (old .usf files still work)
+#		Added more error checking
+#		Fixed a bug related to reverse sample playback
+#	Tools:
+#		Added a tool that converts from the old format to the new format, for the sake of readability
+
+# v1.1.0:
 #	Replayer:
 #		Added support for 16-bit renders (!!!)
 #		Fixed safe downsampling in stereo
@@ -43,8 +51,6 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
 	with open(file_name,"wb") as file:
 		if verbose:
 			print("Summing track " + str(track_number) + "...")
-
-		print_delay=0 # visual feedback
 		
 		file_track=[]
 		start_time=time.perf_counter()
@@ -101,7 +107,7 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
 						if params[param].isdigit():
 							if len(params[param])<2: # and it isn't one byte long
 								params[param]+="0"
-								
+	
 					if params[0]=="--":
 						sample_cut=True
 					 
@@ -118,6 +124,11 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
 								current_sample_check=abs(int(params[0],16))
 							else:
 								current_sample_check=int(params[0],16)
+
+					# fixes a bug related to adding a space at the end of a line... for some reason
+					# (these two lines should've been here from the beginning)
+					if current_sample_check!=0:		
+						sample_reverse=False
 					
 					if param_valid_hex[1]:
 						# check on each unique beat if the sample's playing slowly or not...
@@ -125,9 +136,7 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
 							current_skip_slow=params[1][0]=="0"
 							if current_skip_slow:
 								sample_skip_delay=0
-					
-						# has a beat been "beaten" and speed command non-zero?
-						if params[1][0]!="0" or params[1][1]!="0":
+							# has a beat been "beaten" and speed command non-zero?
 							if current_skip_slow:
 								if params[1][1].isdigit():
 									current_skip=int(params[1][1],16)+1
@@ -148,7 +157,7 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
 					if mixed_depth:
 						header=samples[current_sample-1][0][0] | (samples[current_sample-1][0][1]<<8) | (samples[current_sample-1][0][2]<<16) | (samples[current_sample-1][0][3]<<24) # a 32-bit value containing the first 4 bytes of the file. used to decide whether or not it's a wav file
 						if header==1179011410: # "RIFF"
-							sample_start=40
+							sample_start=44
 
 					sample_size=0
 					sample_bit_skip=1
@@ -166,7 +175,8 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
 							sample_signed=samples[current_sample-1][3]
 						else:
 							sample_size=len(samples[current_sample-1])-1
-						sample_offset=int(params[2],16)*255*sample_bit_skip
+						if param_valid_hex[2]:
+							sample_offset=int(params[2],16)*255*sample_bit_skip
 						if param_valid_hex[3]:
 							current_volume=int(params[3][1],16)+1
 							if current_volume>8:
@@ -174,7 +184,7 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
 					sample_delay_previous=sample_delay-1 # hacky
 					if sample_delay_previous<0:
 						sample_delay_previous=0
-					if beat!=beat_previous:
+					if beat!=beat_previous and param_valid_hex[3]:
 						sample_delay=(int(params[3][0],16)*127)+1
 					if sample_delay==1 and sample_delay_previous==0:
 						if sample_reverse: # start the sample from the end
@@ -275,11 +285,15 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
 					sample_delay-=1
 				beat_previous=beat
 		end_time=time.perf_counter()
-		if filtered and sixteen_bit:
-			for a in range(0,len(file_track)-4,2):
-				byte_filtered=((file_track[a] | (file_track[a+1]<<8))+(file_track[a+2] | (file_track[a+3]<<8)))//2
-				file_track[a]=byte_filtered & 255
-				file_track[a+1]=byte_filtered>>8
+		if filtered:
+			if sixteen_bit:
+				for a in range(0,len(file_track)-4,2):
+					byte_filtered=((file_track[a] | (file_track[a+1]<<8))+(file_track[a+2] | (file_track[a+3]<<8)))//2
+					file_track[a]=byte_filtered & 255
+					file_track[a+1]=byte_filtered>>8
+			#else: # this is disabled for 8-bit, because all it does is add more noise, with no real advantage
+			#	for a in range(0,len(file_track)-2):
+			#		file_track[a]=(file_track[a]+file_track[a+1])//2
 		if render_tracks:
 			if render_to_raw:
 				file.write(bytearray(file_track))
@@ -288,7 +302,7 @@ def render(verbose,beat_length,samples,command_arguments_amount,optional_argumen
 				try:
 					wave_file=wave.open(file_name,"w")
 				except:
-					print("Error: this file is currently being accessed elsewhere!")
+					print("Error: \""+ file_name.strip("temp/") +"\" is currently being accessed elsewhere!")
 					file_open=True
 				if not file_open:
 					wave_file.setnchannels(1)
@@ -354,7 +368,7 @@ if __name__ == "__main__":
 		blank_command+="00 "
 	blank_command=blank_command[:-1]
 
-	print("Unrefined Replayer v1.1.0")
+	print("Unrefined Replayer v1.2.0")
 	print("by Presley Peters, 2022-2023")
 	print()
 	if quality==1:
@@ -404,7 +418,6 @@ if __name__ == "__main__":
 		if keys_exist:
 			sample_rate=song_file["sample_rate"]
 			beat_length=song_file["beat_length"] # in samples
-			#loops=song_file["loops"]
 			
 			if sample_rate*2>44100 and crispy:
 					print("Warning: Crisping will have little effect, as the sample rate (" + str(sample_rate*2) + " Hz) has a bandwidth beyond the percievable range!")
@@ -456,473 +469,531 @@ if __name__ == "__main__":
 
 			if sample_names_exist:
 
+				if "format" in song_file:
+					song_format=song_file["format"]
+				else:
+					song_format=0
+
+				if song_format==0:
+					song_format_string="Old"
+				elif song_format==1:
+					song_format_string="New"
+
 				pattern_tracks=0
 				pattern_track_length=0
 
+				pattern_valid=True # for all patterns
 				for pattern_name in song_file["arrangement"]:
 					pattern_found=False
 					for pattern in song_file["patterns"]:
 						if pattern_name==pattern["name"]:
 							pattern_found=True
+						if song_format==1 and len(pattern["pattern"])==1:
+							pattern_valid=False
 					if not pattern_found:
 						print()
 						print("Error: Pattern \"" + pattern_name + "\" doesn't exist!")
+					elif not pattern_valid:
+						print("Error: Invalid pattern format!")
 
-				if pattern_found:
+				if pattern_valid:
+					patterns=song_file["patterns"]
+					if song_format==1: # is this file using the new format?
+						# find total number of tracks
+						pattern_tracks=0
+						for pattern in patterns:
+							for line in pattern["pattern"]:
+								if len(line)>pattern_tracks:
+									pattern_tracks=len(line)
 
-					# ParePare the pattern, filling in the blanks (tracks)
-					# Basically compiling all the arrangement patterns into one big one, because it's more convenient
+						# fill in the blanks
+						for pattern in patterns:
+							for line in pattern["pattern"]:
+								if len(line)<pattern_tracks:
+									for a in range(0,pattern_tracks-len(line)):
+										line.append(blank_command)
 
-					# Find highest amount of tracks, and length of longest track
-					pattern_track_lengths=[]
-					for pattern in song_file["patterns"]:
-						pattern_track_length=0
-						if len(pattern["pattern"])>pattern_tracks:
-							pattern_tracks=len(pattern["pattern"])
-						for track in pattern["pattern"]:
-							if len(track)>pattern_track_length:
-								pattern_track_length=len(track)
-						pattern_track_lengths.append(pattern_track_length)
+						# convert the patterns
+						patterns_new=[]
+						for pattern in patterns:
+							pattern_new=[] # lovely variable naming :)
+							for a in range(0,pattern_tracks):
+								pattern_new.append([])
+							for line in pattern["pattern"]:
+								for counter,track in enumerate(line):
+									pattern_new[counter].append(track)
+							patterns_new.append(pattern_new.copy())
 
-					# Fill in the blank tracks
-					patterns_updated=[]
-					for counter,pattern in enumerate(song_file["patterns"]):
-						if len(pattern["pattern"])==pattern_tracks:
-							patterns_updated.append(pattern["pattern"])
-						else: # not enough tracks!
-							track_blank=[]
-							for a in range(0,pattern_track_lengths[counter]):
-								track_blank.append(blank_command)
-								
-							pattern_temp=pattern["pattern"]
-							# append the blank track to stand in for all missing tracks
-							for a in range(len(pattern["pattern"])-1,pattern_tracks):
-								pattern_temp.append(track_blank)
+						# change the "patterns" variable
+						for counter,pattern in enumerate(patterns):
+							pattern["pattern"]=patterns_new[counter]
 
-							patterns_updated.append(pattern_temp)
+					if pattern_found:
+						# ParePare the pattern, filling in the blanks (tracks)
+						# Basically compiling all the arrangement patterns into one big one, because it's more convenient
 
-					# Extend any shorter tracks
-					for pattern_num in range(0,len(patterns_updated)):
-						for track_num in range(0,len(patterns_updated[pattern_num])):
-							if len(patterns_updated[pattern_num][track_num])<pattern_track_lengths[pattern_num]:
-								for a in range(len(patterns_updated[pattern_num][track_num]),pattern_track_lengths[pattern_num]):
-									patterns_updated[pattern_num][track_num].append(blank_command)
+						# Find highest amount of tracks, and length of longest track
+						pattern_track_lengths=[]
+						for pattern in patterns:
+							pattern_track_length=0
+							if len(pattern["pattern"])>pattern_tracks:
+								pattern_tracks=len(pattern["pattern"])
+							for track in pattern["pattern"]:
+								if len(track)>pattern_track_length:
+									pattern_track_length=len(track)
+							pattern_track_lengths.append(pattern_track_length)
+
+						# Fill in the blank tracks
+						patterns_updated=[]
+						for counter,pattern in enumerate(patterns):
+							if len(pattern["pattern"])==pattern_tracks:
+								patterns_updated.append(pattern["pattern"])
+							else: # not enough tracks!
+								track_blank=[]
+								for a in range(0,pattern_track_lengths[counter]):
+									track_blank.append(blank_command)
 									
-					# Combine all patterns into one big one!
-					pattern=[]
-					for track_num in range(0,pattern_tracks): # Track at a time baby
-						pattern_track_temp=[]
-						for pattern_name in song_file["arrangement"]: # go through arrangement and find appropriate pattern...
-							for pattern_temp in song_file["patterns"]: # go through patterns until the correct one is found
-								if pattern_temp["name"]==pattern_name: # found correct pattern?
-									pattern_track_temp+=pattern_temp["pattern"][track_num]
-						pattern.append(pattern_track_temp)
+								pattern_temp=pattern["pattern"]
+								# append the blank track to stand in for all missing tracks
+								for a in range(len(pattern["pattern"])-1,pattern_tracks):
+									pattern_temp.append(track_blank)
 
-					pattern_length=len(pattern[0]) # is assumed the same for all other tracks!
-					pattern_tracks=len(pattern)
-					track_length=beat_length*pattern_length # in samples
+								patterns_updated.append(pattern_temp)
 
-					if sample_rate//quality<2000:
-						print("Error: Sample rate too low! Try using a lower quality value.")
-					else:
-						if len(sample_names)==0 and pattern_length==1:
-							print("Error: This file is empty!")
-						else:
-							if verbose:
-								print("File: " + file_name)
-								print("Tracks: " + str(pattern_tracks))
-								print("Song length: " + str(pattern_length//4) + " beats")
-								print("Samples:")
-								for counter,name in enumerate(sample_names):
-									if mixed_depth:
-										depth="8"
-										if name[1]==1:
-											depth="16"
-										print("    Sample " + str(counter+1) + ": " + name[0] + ", Bit depth: " + depth + ", Size: " + str(len(samples[counter][0])/1000) + " KB")
-									else:
-										print("    Sample " + str(counter+1) + ": " + name + ", Size: " + str(len(samples[counter])/1000) + " KB")
-								sample_ram_usage=0
-								for sample in samples:
-									if mixed_depth:
-										sample_ram_usage+=len(sample[0])
-									else:
-										sample_ram_usage+=len(sample)
-								print("Sample RAM usage: " + str(round(sample_ram_usage/1000,3)) + " KB")
-								print()
-
-								#print("Loops added: " + str(loops))
-								print("Beat length in samples: " + str(beat_length))
-								print("Sample rate: " + str(sample_rate) + " Hz")
-								if quality>1:
-									print("    Reduced: " + str(sample_rate//quality) + " Hz")
-								if crispy:
-									print("    Crispy: " + str((sample_rate*2)//quality) + " Hz")
-								if safe_downsample:
-									print("    Downsampled: " + str((sample_rate//quality)//2) + " Hz")
-								try:
-									beats_per_minute=int(60000/((((track_length/sample_rate)*1000/1)/(pattern_length//16))/4)*1000)/1000
-								except:
-									beats_per_minute="N/A"
-								print("Beats per minute: " + str(beats_per_minute))
-								length_seconds=track_length/sample_rate
-								if length_seconds<60:
-									print("Length: " + str(round(length_seconds)) + " seconds")
-								else:
-									print("Length: " + str(round(length_seconds/60)) + " minutes, " + str(round((length_seconds%1)*60)) + " seconds")
-								print()
-									
-								print("Patterns:")
-								pattern_names=[]
-								pattern_lengths=[] # easier to manage ;)
-								pattern_info_str=[]
-								for a in song_file["patterns"]:
-									pattern_names.append(a["name"])
-									pattern_length_temp=0
-									for track in a["pattern"]:
-										if len(track)>pattern_length_temp:
-											pattern_length_temp=len(track)
-									pattern_lengths.append(pattern_length_temp)
-									pattern_info_str.append(a["name"] + " (length: " + str(pattern_length_temp) + ")")
-								print("    "+", ".join(pattern_info_str))
-								print()
-
-								print("Arrangement:")
-								arrangement=[]
-								for a in song_file["arrangement"]:
-									arrangement.append(a)
-								print("    "+", ".join(arrangement) + " (" + str(len(song_file["arrangement"])) + " patterns)")
-								print()
-							
-							start_time=time.perf_counter()
-
-							track_number=1 # for visual feedback only!
-							error=False # very vague name, I know
-							
-							if crispy:
-								sample_rate*=2
-							 
-							if not os.path.isdir("temp") and not render_tracks:
-								os.mkdir("temp")
-
-							manager=multiprocessing.Manager()
-							processes=[]
-							for track in range(0,pattern_tracks):
-								# assemble the current track into an array from which to read...
-								current_pattern_track=[]
-								for beat in range(0,pattern_length):
-									if beat<len(pattern[track]):
-										current_pattern_track.append(pattern[track][beat])
-									else:
-										current_pattern_track.append(blank_command)
-								processes.append(multiprocessing.Process(target=render,args=(verbose,beat_length,samples,command_arguments_amount,optional_arguments_amount,track_length,quality,current_pattern_track,track+1,pattern_tracks,sixteen_bit,mixed_depth,render_tracks,custom_file_name,render_to_raw,crispy,sample_rate,stereo_finalize,)))
-							
-							for process in processes:
-								process.start()
-							for process in processes:
-								process.join()
-
-							file_open=False
-
-							# summing time!
-
-							if error:
-								print("Error: Incorrect number of line arguments! At least " + str(command_arguments_amount-optional_arguments_amount) + " are required")
-							else:
-								if not render_tracks: # if rendering individual tracks, skip summing
-									track_length_rendered=track_length//quality
-									if crispy:
-										track_length_rendered*=2
-									if stereo:
-										file_finished=[0]*track_length_rendered*2
-									else:
-										file_finished=[0]*track_length_rendered
-									print_counter_max=80000 # this will vary depending on the speed of operations
-									print_counter=print_counter_max
-
-									position_overall=0
-									for track in range(0,pattern_tracks): # go through each track, step through each byte and add it to the file arrays
-										track_file_name="temp/track_" + str(track+1) + ".raw"
-										with open(track_file_name,"rb") as file:
-											position=0
-											position_actual=0
-											byte=file.read(1)
-											while byte:
-												if verbose:
-													if print_counter>print_counter_max/2:
-														percentage=(position_overall/(track_length//quality))/pattern_tracks
-														if crispy:
-															percentage/=2
-														percentage*=100
-														print("Summing all tracks together... (" + str(track+1) + "/" + str(pattern_tracks) + ") " + str(round(percentage,3)) + "%    ",end="\r")
-														print_counter=0
-													print_counter+=1
-
-												if position<len(file_finished):
-													position_actual=position
-													byte_value=int.from_bytes(byte)
-													if sixteen_bit:
-														byte_value=byte_value | (int.from_bytes(file.read(1))<<8)
-												else:
-													if sixteen_bit:
-														byte_value=32767
-													else:
-														byte_value=127
-												if stereo:
-													if track%2==0:
-														file_finished[position_actual*2]+=byte_value
-													else:
-														file_finished[position_actual*2+1]+=byte_value
-												else:
-													file_finished[position_actual]+=byte_value
-												byte=file.read(1)
-												position+=1
-												position_overall+=1
-										os.remove(track_file_name)
-
-									if verbose:
-										print("Summing all tracks together... 100%            ",end="\r")
-										print()
-									
-									if stereo:
-										for a in range(0,len(file_finished),2):
-											if pattern_tracks%2==1: # odd number of tracks?
-												if sixteen_bit:
-													file_finished[a]-=32767
-												else:
-													file_finished[a]-=127
-											file_finished[a]//=pattern_tracks//2
-											file_finished[a+1]//=pattern_tracks//2
-											if file_finished[a]<0: # without these checks, the wave will "wrap around" when it clips
-												file_finished[a]=0
-											if file_finished[a]>65535:
-												file_finished[a]=65535
-											if file_finished[a+1]<0:
-												file_finished[a+1]=0
-											if file_finished[a+1]>65535:
-												file_finished[a+1]=65535
-									else:
-										for counter,byte in enumerate(file_finished):
-											file_finished[counter]=byte//pattern_tracks
-									
-									file_finalized=[]
-									print_counter=print_counter_max*2
-									if stereo_finalize:
-										file_finished_orig=file_finished.copy()
-										passes=40
-										for a in range(0,passes): # we want it to be nice and steep
-											file_filtered=[]
-											if sixteen_bit:
-												previous_byte=32767
-											else:
-												previous_byte=127
-											for b in range(0,len(file_finished),2): # if stereo, file_finished will contain both left and right (interleaved), so we need to sum them together when filtering
-												byte=(file_finished_orig[b]+file_finished_orig[b+1])//2
-												filtered_byte=(byte+previous_byte)//2
-												file_filtered.append(filtered_byte)
-												file_filtered.append(filtered_byte)
-												previous_byte=byte
-												if verbose:
-													if print_counter>print_counter_max*2:
-														print("Filtering... (" + str(a+1) + "/" + str(passes) + ") " + str(round(((b+(a*len(file_finished_orig)))/(len(file_finished_orig)*passes))*100,3)) + "%       ",end="\r")
-														print_counter=0
-													else:
-														print_counter+=1
-											file_finished_orig=file_filtered.copy()
-										file_finished_orig.clear()
-										if verbose:
-											print("Filtering... 100%                ",end="\r")
-											print()
-											
-										print_counter=print_counter_max*2
-										for a in range(0,len(file_finished),2):
-											if verbose:
-												if print_counter>print_counter_max*2:
-													print("Finalizing... " + str(round((a/len(file_finished))*100,3)) + "%    ",end="\r")
-													print_counter=0
-												else:
-													print_counter+=1
-											sample_sum=(file_finished[a]+file_finished[a+1])//2
-											sample_sum_left=(file_finished[a]+sample_sum+file_filtered[a])//3
-											sample_sum_right=(file_finished[a+1]+sample_sum+file_filtered[a])//3
-											file_finalized.append(sample_sum_left)
-											file_finalized.append(sample_sum_right)
+						# Extend any shorter tracks
+						for pattern_num in range(0,len(patterns_updated)):
+							for track_num in range(0,len(patterns_updated[pattern_num])):
+								if len(patterns_updated[pattern_num][track_num])<pattern_track_lengths[pattern_num]:
+									for a in range(len(patterns_updated[pattern_num][track_num]),pattern_track_lengths[pattern_num]):
+										patterns_updated[pattern_num][track_num].append(blank_command)
 										
-										file_finished=file_finalized.copy()
-										file_finalized.clear()
-										if verbose:
-											print("Finalizing... 100%      ",end="\r")
-											print()
-									if safe_downsample and not stereo_finalize: # ignored if finalizing...
-										if sixteen_bit:
-											previous_byte=32767
+						# Combine all patterns into one big one!
+						pattern=[]
+						for track_num in range(0,pattern_tracks): # Track at a time baby
+							pattern_track_temp=[]
+							for pattern_name in song_file["arrangement"]: # go through arrangement and find appropriate pattern...
+								for pattern_temp in song_file["patterns"]: # go through patterns until the correct one is found
+									if pattern_temp["name"]==pattern_name: # found correct pattern?
+										pattern_track_temp+=pattern_temp["pattern"][track_num]
+							pattern.append(pattern_track_temp)
+
+						pattern_length=len(pattern[0]) # is assumed the same for all other tracks!
+						pattern_tracks=len(pattern)
+						track_length=beat_length*pattern_length # in samples
+
+						if sample_rate//quality<2000:
+							print("Error: Sample rate too low! Try using a lower quality value.")
+						else:
+							if len(sample_names)==0 and pattern_length==1:
+								print("Error: This file is empty!")
+							else:
+								if verbose:
+									print("File: " + file_name)
+									print("Format: " + song_format_string)
+									print("Tracks: " + str(pattern_tracks))
+									print("Song length: " + str(pattern_length//4) + " beats")
+									print("Samples:")
+									for counter,name in enumerate(sample_names):
+										if mixed_depth:
+											depth="8"
+											if name[1]==1:
+												depth="16"
+											print("    Sample " + str(counter+1) + ": " + name[0] + ", Bit depth: " + depth + ", Size: " + str(len(samples[counter][0])/1000) + " KB")
 										else:
-											previous_byte=127
-										file_filtered=[]
-										file_downsampled=[]
-										print_counter=print_counter_max*2
-										position=0
+											print("    Sample " + str(counter+1) + ": " + name + ", Size: " + str(len(samples[counter])/1000) + " KB")
+									sample_ram_usage=0
+									for sample in samples:
+										if mixed_depth:
+											sample_ram_usage+=len(sample[0])
+										else:
+											sample_ram_usage+=len(sample)
+									print("Sample RAM usage: " + str(round(sample_ram_usage/1000,3)) + " KB")
+									print()
+
+									print("Beat length in samples: " + str(beat_length))
+									print("Sample rate: " + str(sample_rate) + " Hz")
+									if quality>1:
+										print("    Reduced: " + str(sample_rate//quality) + " Hz")
+									if crispy:
+										print("    Crispy: " + str((sample_rate*2)//quality) + " Hz")
+									if safe_downsample:
+										print("    Downsampled: " + str((sample_rate//quality)//2) + " Hz")
+									try:
+										beats_per_minute=int(60000/((((track_length/sample_rate)*1000/1)/(pattern_length//16))/4)*1000)/1000
+									except:
+										beats_per_minute="N/A"
+									print("Beats per minute: " + str(beats_per_minute))
+									length_seconds=track_length/sample_rate
+									if length_seconds<60:
+										print("Length: " + str(round(length_seconds)) + " seconds")
+									else:
+										print("Length: " + str(round(length_seconds/60)) + " minutes, " + str(round((length_seconds%1)*60)) + " seconds")
+									print()
+										
+									print("Patterns:")
+									pattern_names=[]
+									pattern_lengths=[] # easier to manage ;)
+									pattern_info_str=[]
+									for a in song_file["patterns"]:
+										pattern_names.append(a["name"])
+										pattern_length_temp=0
+										for track in a["pattern"]:
+											if len(track)>pattern_length_temp:
+												pattern_length_temp=len(track)
+										pattern_lengths.append(pattern_length_temp)
+										pattern_info_str.append(a["name"] + " (length: " + str(pattern_length_temp) + ")")
+									print("    "+", ".join(pattern_info_str))
+									print()
+
+									print("Arrangement:")
+									arrangement=[]
+									for a in song_file["arrangement"]:
+										arrangement.append(a)
+									print("    "+", ".join(arrangement) + " (" + str(len(song_file["arrangement"])) + " patterns)")
+									print()
+								
+								start_time=time.perf_counter()
+
+								track_number=1 # for visual feedback only!
+								error=False # very vague name, I know
+								
+								if crispy:
+									sample_rate*=2
+								 
+								if not os.path.isdir("temp") and not render_tracks:
+									os.mkdir("temp")
+
+								good_characters="0123456789abcdefr-"
+
+								manager=multiprocessing.Manager()
+								processes=[]
+								for track in range(0,pattern_tracks):
+									invalid_commands=[]
+									# assemble the current track into an array from which to read...
+									current_pattern_track=[]
+									for beat in range(0,pattern_length):
+										if beat<len(pattern[track]):
+											params=pattern[track][beat].split(" ")
+											for param in params:
+												if not set(param).issubset(set(good_characters)):
+													invalid_commands.append(param)
+											current_pattern_track.append(pattern[track][beat])
+										else:
+											current_pattern_track.append(blank_command)
+									if len(invalid_commands)>0:
+										print("Warning: Invalid commands found on track " + str(track+1) + ": " + " ".join(invalid_commands))
+									processes.append(multiprocessing.Process(target=render,args=(verbose,beat_length,samples,command_arguments_amount,optional_arguments_amount,track_length,quality,current_pattern_track,track+1,pattern_tracks,sixteen_bit,mixed_depth,render_tracks,custom_file_name,render_to_raw,crispy,sample_rate,stereo_finalize,)))
+								
+								for process in processes:
+									process.start()
+								for process in processes:
+									process.join()
+
+								file_open=False
+
+								# summing time!
+
+								if error:
+									print("Error: Incorrect number of line arguments! At least " + str(command_arguments_amount-optional_arguments_amount) + " are required")
+								else:
+									if not render_tracks: # if rendering individual tracks, skip summing
+										track_length_rendered=track_length//quality
+										if crispy:
+											track_length_rendered*=2
 										if stereo:
-											for byte in range(0,len(file_finished)-2,2):
-												if verbose:
-													if print_counter>print_counter_max:
-														print("Filtering... " + str(round((position/len(file_finished))*100,3)) + "%    ",end="\r")
-														print_counter=0
-													else:
+											file_finished=[0]*track_length_rendered*2
+										else:
+											file_finished=[0]*track_length_rendered
+										print_counter_max=80000 # this will vary depending on the speed of operations
+										print_counter=print_counter_max
+
+										position_overall=0
+										for track in range(0,pattern_tracks): # go through each track, step through each byte and add it to the file arrays
+											track_file_name="temp/track_" + str(track+1) + ".raw"
+											with open(track_file_name,"rb") as file:
+												position=0
+												position_actual=0
+												byte=file.read(1)
+												while byte:
+													if verbose:
+														if print_counter>print_counter_max/2:
+															percentage=(position_overall/(track_length//quality))/pattern_tracks
+															if crispy:
+																percentage/=2
+															percentage*=100
+															print("Summing all tracks together... (" + str(track+1) + "/" + str(pattern_tracks) + ") " + str(round(percentage,3)) + "%    ",end="\r")
+															print_counter=0
 														print_counter+=1
-												file_filtered.append((previous_byte+file_finished[byte])//2)
+
+													if position<len(file_finished):
+														position_actual=position
+														byte_value=int.from_bytes(byte)
+														if sixteen_bit:
+															byte_value=byte_value | (int.from_bytes(file.read(1))<<8)
+													else:
+														if sixteen_bit:
+															byte_value=32767
+														else:
+															byte_value=127
+													if stereo:
+														if track%2==0:
+															file_finished[position_actual*2]+=byte_value
+														else:
+															file_finished[position_actual*2+1]+=byte_value
+													else:
+														file_finished[position_actual]+=byte_value
+													byte=file.read(1)
+													position+=1
+													position_overall+=1
+											os.remove(track_file_name)
+
+										if verbose:
+											print("Summing all tracks together... 100%            ",end="\r")
+											print()
+										
+										if stereo:
+											for a in range(0,len(file_finished),2):
+												if pattern_tracks%2==1: # odd number of tracks?
+													if sixteen_bit:
+														file_finished[a]-=32767
+													else:
+														file_finished[a]-=127
+												file_finished[a]//=pattern_tracks//2
+												file_finished[a+1]//=pattern_tracks//2
+												if file_finished[a]<0: # without these checks, the wave will "wrap around" when it clips
+													file_finished[a]=0
+												if file_finished[a]>65535:
+													file_finished[a]=65535
+												if file_finished[a+1]<0:
+													file_finished[a+1]=0
+												if file_finished[a+1]>65535:
+													file_finished[a+1]=65535
+										else:
+											for counter,byte in enumerate(file_finished):
+												file_finished[counter]=byte//pattern_tracks
+										
+										file_finalized=[]
+										print_counter=print_counter_max*2
+										if stereo_finalize:
+											file_finished_orig=file_finished.copy()
+											passes=40
+											for a in range(0,passes): # we want it to be nice and steep
+												file_filtered=[]
 												if sixteen_bit:
 													previous_byte=32767
 												else:
 													previous_byte=127
-												file_filtered.append((previous_byte+file_finished[byte+1])//2)
-												position+=2
-										else:
-											for byte in file_finished: # note to future me: one pass is enough to completely eliminate aliasing!
+												for b in range(0,len(file_finished),2): # if stereo, file_finished will contain both left and right (interleaved), so we need to sum them together when filtering
+													byte=(file_finished_orig[b]+file_finished_orig[b+1])//2
+													filtered_byte=(byte+previous_byte)//2
+													file_filtered.append(filtered_byte)
+													file_filtered.append(filtered_byte)
+													previous_byte=byte
+													if verbose:
+														if print_counter>print_counter_max*2:
+															print("Filtering... (" + str(a+1) + "/" + str(passes) + ") " + str(round(((b+(a*len(file_finished_orig)))/(len(file_finished_orig)*passes))*100,3)) + "%       ",end="\r")
+															print_counter=0
+														else:
+															print_counter+=1
+												file_finished_orig=file_filtered.copy()
+											file_finished_orig.clear()
+											if verbose:
+												print("Filtering... 100%                ",end="\r")
+												print()
+												
+											print_counter=print_counter_max*2
+											for a in range(0,len(file_finished),2):
 												if verbose:
-													if print_counter>print_counter_max:
-														print("Filtering... " + str(round((position/len(file_finished))*100,3)) + "%    ",end="\r")
+													if print_counter>print_counter_max*2:
+														print("Finalizing... " + str(round((a/len(file_finished))*100,3)) + "%    ",end="\r")
 														print_counter=0
 													else:
 														print_counter+=1
-												file_filtered.append((byte+previous_byte)//2) # that my friends is a low-pass filter. (mind explodes)
-												previous_byte=byte
-												position+=1
-												
-										if verbose:
-											print("Filtering... 100%          ",end="\r")
-											print()
-										print_counter=print_counter_max
-
-										# now we "downsample" the filtered file... by skipping every other byte :p
-										position=0
-										while position<len(file_filtered):
+												sample_sum=(file_finished[a]+file_finished[a+1])//2
+												sample_sum_left=(file_finished[a]+sample_sum+file_filtered[a])//3
+												sample_sum_right=(file_finished[a+1]+sample_sum+file_filtered[a])//3
+												file_finalized.append(sample_sum_left)
+												file_finalized.append(sample_sum_right)
+											
+											file_finished=file_finalized.copy()
+											file_finalized.clear()
 											if verbose:
-												if print_counter>print_counter_max:
-													print("Downsampling... " + str(round((position/len(file_filtered))*100,2)) + "%    ",end="\r")
-													print_counter=0
-												else:
-													print_counter+=1
-											if stereo:
-												file_downsampled.append(file_filtered[position])
-												file_downsampled.append(file_filtered[position+1])
-												position+=4
+												print("Finalizing... 100%      ",end="\r")
+												print()
+										if safe_downsample and not stereo_finalize: # ignored if finalizing...
+											if sixteen_bit:
+												previous_byte=32767
 											else:
-												file_downsampled.append(file_filtered[position])
-												position+=2
-										file_finished=file_downsampled.copy()
-										file_filtered.clear()
-										file_downsampled.clear()
+												previous_byte=127
+											file_filtered=[]
+											file_downsampled=[]
+											print_counter=print_counter_max*2
+											position=0
+											if stereo:
+												for byte in range(0,len(file_finished)-2,2):
+													if verbose:
+														if print_counter>print_counter_max:
+															print("Filtering... " + str(round((position/len(file_finished))*100,3)) + "%    ",end="\r")
+															print_counter=0
+														else:
+															print_counter+=1
+													file_filtered.append((previous_byte+file_finished[byte])//2)
+													if sixteen_bit:
+														previous_byte=32767
+													else:
+														previous_byte=127
+													file_filtered.append((previous_byte+file_finished[byte+1])//2)
+													position+=2
+											else:
+												for byte in file_finished: # note to future me: one pass is enough to completely eliminate aliasing!
+													if verbose:
+														if print_counter>print_counter_max:
+															print("Filtering... " + str(round((position/len(file_finished))*100,3)) + "%    ",end="\r")
+															print_counter=0
+														else:
+															print_counter+=1
+													file_filtered.append((byte+previous_byte)//2) # that my friends is a low-pass filter. (mind explodes)
+													previous_byte=byte
+													position+=1
+													
+											if verbose:
+												print("Filtering... 100%          ",end="\r")
+												print()
+											print_counter=print_counter_max
 
-										if verbose:
-											print("Downsampling... 100%            ",end="\r")
-											print()
-											print()
+											# now we "downsample" the filtered file... by skipping every other byte :p
+											position=0
+											while position<len(file_filtered):
+												if verbose:
+													if print_counter>print_counter_max:
+														print("Downsampling... " + str(round((position/len(file_filtered))*100,2)) + "%    ",end="\r")
+														print_counter=0
+													else:
+														print_counter+=1
+												if stereo:
+													file_downsampled.append(file_filtered[position])
+													file_downsampled.append(file_filtered[position+1])
+													position+=4
+												else:
+													file_downsampled.append(file_filtered[position])
+													position+=2
+											file_finished=file_downsampled.copy()
+											file_filtered.clear()
+											file_downsampled.clear()
 
-								end_time=time.perf_counter()
-								time_taken=end_time-start_time
-								if render_tracks:
-									tracks_or_file="Tracks"
-								else:
-									tracks_or_file="File"
-								if time_taken<60:
-									print(tracks_or_file + " rendered in " + str(round(time_taken,2)) + " seconds!")
-								else:
-									print(tracks_or_file + " rendered in " + str(round(time_taken/60)) + " minutes, " + str(round((time_taken%1)*60)) + " seconds!")
+											if verbose:
+												print("Downsampling... 100%            ",end="\r")
+												print()
+												print()
 
-							if verbose and not render_tracks:
-								file_size=len(file_finished)
-								if sixteen_bit:
-									file_size*=2
-								print("File size: " + str(round(file_size/1000,3)) + " KB")
+									for a in range(0,len(file_finished)): # a very weird bug when changing the render quality...
+										if sixteen_bit:
+											if file_finished[a]>65535:
+												file_finished[a]=65535
+										else:
+											if file_finished[a]>255:
+												file_finished[a]=255
 
-							if not render_tracks:
-								if custom_file_name=="":
-									file_name="result"
-								else:
-									file_name=custom_file_name
+									end_time=time.perf_counter()
+									time_taken=end_time-start_time
+									if render_tracks:
+										tracks_or_file="Tracks"
+									else:
+										tracks_or_file="File"
+									if time_taken<60:
+										print(tracks_or_file + " rendered in " + str(round(time_taken,2)) + " seconds!")
+									else:
+										print(tracks_or_file + " rendered in " + str(round(time_taken/60)) + " minutes, " + str(round((time_taken%1)*60)) + " seconds!")
 
-								file_open=False
-								if sixteen_bit:
-									for a in range(0,len(file_finished)): # convert to signed
-										file_finished[a]=(file_finished[a]+32768) & 65535
-								if render_to_raw:
-									file_name+=".raw"
-									with open(file_name, "wb") as file:
-										file.write(bytearray(file_finished))
-								else:
-									file_name+=".wav"
-									try:
-										wave_file=wave.open(file_name,"w")
-									except:
-										print("Error: this file is currently being accessed elsewhere!")
-										file_open=True
-										
-								if not file_open:
+								if verbose and not render_tracks:
+									file_size=len(file_finished)
 									if sixteen_bit:
-										file_sixteen_bit=[]
-										for byte in file_finished:
-											file_sixteen_bit.append(byte & 255)
-											file_sixteen_bit.append(byte>>8)
-										file_finished=file_sixteen_bit.copy()
-										file_sixteen_bit.clear()
+										file_size*=2
+									print("File size: " + str(round(file_size/1000,3)) + " KB")
+
+								if not render_tracks:
+									if custom_file_name=="":
+										file_name="result"
+									else:
+										file_name=custom_file_name
+
+									file_open=False
+									if sixteen_bit:
+										for a in range(0,len(file_finished)): # convert to signed
+											file_finished[a]=(file_finished[a]+32768) & 65535
 									if render_to_raw:
+										file_name+=".raw"
 										with open(file_name, "wb") as file:
 											file.write(bytearray(file_finished))
 									else:
-										if stereo:
-											wave_file.setnchannels(2)
-										else:
-											wave_file.setnchannels(1)
-										if sixteen_bit:
-											wave_file.setsampwidth(2) # in bytes (1 is 8 bit, 2 is 16 bit, etc.)
-										else:
-											wave_file.setsampwidth(1)
-										if safe_downsample:
-											wave_file.setframerate((sample_rate//quality)//2)
-										else:
-											wave_file.setframerate(sample_rate//quality)
-										wave_file.writeframesraw(bytearray(file_finished))
-										wave_file.close()
-
-								if (no_play and ding) or (not no_play):
-									pya=pyaudio.PyAudio()
-								if no_play or render_tracks:
-									if ding:
-										print("Done!")
-										stream=pya.open(format=pyaudio.paUInt8,rate=11025,output=True,channels=1,frames_per_buffer=2**stutter)
+										file_name+=".wav"
 										try:
-											with open("ding.raw","rb") as file:
-												for byte in file:
-													stream.write(byte)
+											wave_file=wave.open(file_name,"w")
 										except:
-											pass # do nothing if the file doesn't exist
-								else:
-									print()
-									print("Playing...")
-									play_sample_rate=sample_rate//quality
-									if safe_downsample:
-										play_sample_rate=play_sample_rate//2
-									play_channels=1
-									if stereo:
-										play_channels=2
-									
-									if sixteen_bit:
-										stream=pya.open(format=pyaudio.paInt16,rate=play_sample_rate,output=True,channels=play_channels,frames_per_buffer=2**stutter)
-									else:
-										stream=pya.open(format=pyaudio.paUInt8,rate=play_sample_rate,output=True,channels=play_channels,frames_per_buffer=2**stutter)
-									
-									with open(file_name,"rb") as file:
-										for byte in file: # the only occasion we'll need to read from the file instead
-											stream.write(byte)
+											print("Error: this file is currently being accessed elsewhere!")
+											file_open=True
 											
-								if not no_play:
-									stream.stop_stream()
-									stream.close()
-									pya.terminate()
-							if not ding:
-								print("Done!")
+									if not file_open:
+										if sixteen_bit:
+											file_sixteen_bit=[]
+											for byte in file_finished:
+												file_sixteen_bit.append(byte & 255)
+												file_sixteen_bit.append(byte>>8)
+											file_finished=file_sixteen_bit.copy()
+											file_sixteen_bit.clear()
+										if render_to_raw:
+											with open(file_name, "wb") as file:
+												file.write(bytearray(file_finished))
+										else:
+											if stereo:
+												wave_file.setnchannels(2)
+											else:
+												wave_file.setnchannels(1)
+											if sixteen_bit:
+												wave_file.setsampwidth(2) # in bytes (1 is 8 bit, 2 is 16 bit, etc.)
+											else:
+												wave_file.setsampwidth(1)
+											if safe_downsample:
+												wave_file.setframerate((sample_rate//quality)//2)
+											else:
+												wave_file.setframerate(sample_rate//quality)
+											wave_file.writeframesraw(bytearray(file_finished))
+											wave_file.close()
 
-							#if loops>0:
-							#    for a in range(0,loops):
-							#        with open("result.raw", "ab") as file:
-							#            file.write(bytearray(file_finished))
+									if (no_play and ding) or (not no_play):
+										pya=pyaudio.PyAudio()
+									if no_play or render_tracks:
+										if ding:
+											print("Done!")
+											try:
+												with open("ding.raw","rb") as file:
+													stream=pya.open(format=pyaudio.paUInt8,rate=11025,output=True,channels=1,frames_per_buffer=2**stutter)
+													for byte in file:
+														stream.write(byte)
+											except:
+												pass # do nothing if the file doesn't exist
+									else:
+										print()
+										print("Playing...")
+										play_sample_rate=sample_rate//quality
+										if safe_downsample:
+											play_sample_rate=play_sample_rate//2
+										play_channels=1
+										if stereo:
+											play_channels=2
+										
+										if sixteen_bit:
+											stream=pya.open(format=pyaudio.paInt16,rate=play_sample_rate,output=True,channels=play_channels,frames_per_buffer=2**stutter)
+										else:
+											stream=pya.open(format=pyaudio.paUInt8,rate=play_sample_rate,output=True,channels=play_channels,frames_per_buffer=2**stutter)
+										
+										with open(file_name,"rb") as file:
+											for byte in file: # the only occasion we'll need to read from the file instead
+												stream.write(byte)
+												
+									if not no_play:
+										stream.stop_stream()
+										stream.close()
+										pya.terminate()
+								if not ding:
+									print("Done!")
