@@ -16,7 +16,7 @@ pad_tracks=args.pad_tracks
 readable=args.readable
 spaces=args.spaces
 
-print("Format v1.0.0")
+print("Format v1.0.1")
 print("by Presley Peters, 2023")
 print()
 
@@ -105,7 +105,18 @@ if success:
 						if thing=="arrangement":
 							file_string+="\""+item+"\""
 						else:
-							file_string+="\n\t\t\""+item+"\""
+							if isinstance(item,list):
+								file_string+="\n\t\t["
+								for other_counter,other_item in enumerate(item):
+									if isinstance(other_item,int):
+										file_string+=str(other_item)
+									else:
+										file_string+="\"" + other_item + "\""
+									if other_counter<len(item)-1:
+										file_string+=","
+								file_string+="]"
+							else:
+								file_string+="\n\t\t\""+item+"\""
 						if item_counter<len(json_file[thing])-1:
 							file_string+=","
 					file_string+="\n\t]"
